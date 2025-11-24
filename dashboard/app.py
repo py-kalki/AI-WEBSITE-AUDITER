@@ -20,9 +20,63 @@ from ai.suggestion_generator import SuggestionGenerator
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
-st.set_page_config(page_title="AI Website Auditor", layout="wide")
+st.set_page_config(page_title="AI Website Auditor", layout="wide", page_icon="🚀")
 
-st.title("AI Website Auditor Dashboard")
+# Custom CSS for UI Polish
+st.markdown("""
+<style>
+    /* Main Background & Font */
+    .stApp {
+        background-color: #0e1117;
+        font-family: 'Inter', sans-serif;
+    }
+    
+    /* Sidebar */
+    [data-testid="stSidebar"] {
+        background-color: #161b22;
+        border-right: 1px solid #30363d;
+    }
+    
+    /* Headers */
+    h1, h2, h3 {
+        color: #f0f6fc !important;
+        font-weight: 700 !important;
+    }
+    
+    /* Cards/Metrics */
+    [data-testid="stMetricValue"] {
+        font-size: 2rem !important;
+        color: #58a6ff !important;
+    }
+    
+    /* Buttons */
+    .stButton button {
+        background-color: #238636;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-weight: 600;
+        transition: all 0.2s;
+    }
+    .stButton button:hover {
+        background-color: #2ea043;
+        transform: scale(1.02);
+    }
+    
+    /* Tables */
+    [data-testid="stDataFrame"] {
+        border: 1px solid #30363d;
+        border-radius: 6px;
+    }
+    
+    /* Success/Info Messages */
+    .stSuccess, .stInfo, .stWarning, .stError {
+        border-radius: 6px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+st.title("🚀 AI Website Auditor Dashboard")
 
 # Sidebar
 st.sidebar.header("Navigation")
@@ -72,6 +126,7 @@ if page == "Scrape":
     with col2:
         location = st.text_input("Location (e.g., New York, Mumbai)")
         total = st.number_input("Number of Leads", min_value=1, max_value=50, value=5)
+        strict_mode = st.checkbox("Strict Mode: Only save leads with Website & Email", value=True)
         
     if st.button("Start Scraping"):
         if keyword and location:
@@ -82,22 +137,28 @@ if page == "Scrape":
                 if results:
                     st.success(f"Found {len(results)} potential leads!")
                     
-                    # Filter to only keep leads with both email and website
-                    filtered_results = [
-                        lead for lead in results 
-                        if lead.get('email') and lead.get('email') != 'N/A' 
-                        and lead.get('website') and lead.get('website') != 'N/A'
-                    ]
+                    if strict_mode:
+                        # Filter to only keep leads with both email and website
+                        filtered_results = [
+                            lead for lead in results 
+                            if lead.get('email') and lead.get('email') != 'N/A' 
+                            and lead.get('website') and lead.get('website') != 'N/A'
+                        ]
+                        skipped_count = len(results) - len(filtered_results)
+                    else:
+                        filtered_results = results
+                        skipped_count = 0
                     
                     if filtered_results:
                         count = 0
                         for lead in filtered_results:
                             if insert_lead(lead):
                                 count += 1
-                        st.info(f"Saved {count} leads with both email and website to database.")
-                        st.warning(f"Filtered out {len(results) - len(filtered_results)} leads without email or website.")
+                        st.info(f"Saved {count} leads to database.")
+                        if skipped_count > 0:
+                            st.warning(f"Filtered out {skipped_count} leads without email or website.")
                     else:
-                        st.warning("No leads found with both email and website. Try a different search.")
+                        st.warning("No leads matched your criteria.")
                 else:
                     st.warning("No leads found.")
         else:
@@ -336,6 +397,7 @@ elif page == "Mass Outreach":
             location = st.text_input("Location", key="mass_location")
             # Fixed at 15 leads as per requirement, but editable if needed
             total = st.number_input("Leads to Generate", value=15, min_value=1, max_value=50, key="mass_total")
+            strict_mode_mass = st.checkbox("Strict Mode: Only process leads with Website & Email", value=True, key="mass_strict")
             
         st.subheader("Email Template")
         default_template = """Subject: Quick question about {Business}
@@ -385,11 +447,15 @@ Best,
                 log(f"Found {len(results)} raw leads.")
                 
                 # 2. Filter
-                valid_leads = [l for l in results if l.get('email') and l.get('email') != 'N/A' and l.get('website') and l.get('website') != 'N/A']
-                log(f"Filtered to {len(valid_leads)} leads with Email & Website.")
+                if strict_mode_mass:
+                    valid_leads = [l for l in results if l.get('email') and l.get('email') != 'N/A' and l.get('website') and l.get('website') != 'N/A']
+                    log(f"Strict Mode ON: Filtered to {len(valid_leads)} leads with Email & Website.")
+                else:
+                    valid_leads = results
+                    log(f"Strict Mode OFF: Processing all {len(valid_leads)} leads.")
                 
                 if not valid_leads:
-                    st.warning("No valid leads found (with both email and website).")
+                    st.warning("No valid leads found matching criteria.")
                 else:
                     # Save leads first
                     saved_leads = []
