@@ -81,6 +81,39 @@ class PDFReportGenerator:
             
         story.append(Spacer(1, 20))
         
+        # AI Qualitative Review
+        if 'ai_review' in audit_data and 'error' not in audit_data['ai_review']:
+            review = audit_data['ai_review']
+            story.append(Paragraph("AI Professional Review", self.heading_style))
+            
+            # Create a table for the review scores and observations
+            review_data = [
+                ["Area", "Score", "Observation"],
+                ["Value Proposition", f"{review.get('value_proposition', {}).get('score', 0)}/10", review.get('value_proposition', {}).get('observation', 'N/A')],
+                ["Copywriting", f"{review.get('copywriting', {}).get('score', 0)}/10", review.get('copywriting', {}).get('observation', 'N/A')],
+                ["Trust Factors", f"{review.get('trust_factors', {}).get('score', 0)}/10", review.get('trust_factors', {}).get('observation', 'N/A')],
+                ["Call to Action", f"{review.get('cta', {}).get('score', 0)}/10", review.get('cta', {}).get('observation', 'N/A')]
+            ]
+            
+            t_review = Table(review_data, colWidths=[100, 50, 350])
+            t_review.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('WORDWRAP', (0, 0), (-1, -1), True)
+            ]))
+            story.append(t_review)
+            story.append(Spacer(1, 10))
+            
+            # Summary
+            story.append(Paragraph(f"<b>Summary:</b> {review.get('summary', 'N/A')}", self.normal_style))
+            story.append(Spacer(1, 20))
+
         # AI Suggestions
         story.append(Paragraph("AI Recommendations", self.heading_style))
         if suggestions:

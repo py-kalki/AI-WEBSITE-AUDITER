@@ -97,13 +97,26 @@ async def run_analysis(lead_id):
     overall_score = calc.calculate(p_data, s_data, u_data, m_data, l_data)
     priorities = calc.get_priority_list(p_data, s_data, u_data, m_data, l_data)
     
+    # Run AI Audit Analysis
+    print("Running AI Qualitative Analysis...")
+    try:
+        from ai.ai_analyzer import AIAuditAnalyzer
+        ai_analyzer = AIAuditAnalyzer()
+        # We don't have raw HTML here easily unless we refactor, so let analyzer fetch it again for now
+        # Optimization: In future, pass HTML from one of the other analyzers if possible
+        ai_review = ai_analyzer.analyze(url)
+    except Exception as e:
+        print(f"AI Analysis failed: {e}")
+        ai_review = {"error": str(e)}
+
     audit_data = {
         "performance": p_data,
         "seo": s_data,
         "ux": u_data,
         "mobile": m_data,
         "links": l_data,
-        "priorities": priorities
+        "priorities": priorities,
+        "ai_review": ai_review
     }
     
     # Save Audit

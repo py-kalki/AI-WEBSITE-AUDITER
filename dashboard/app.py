@@ -210,7 +210,30 @@ elif page == "Audit":
                 audit_data_dict = json.loads(audit['audit_data'])
             except:
                 audit_data_dict = {}
+            
+            # Display AI Qualitative Review if available
+            if 'ai_review' in audit_data_dict and 'error' not in audit_data_dict['ai_review']:
+                review = audit_data_dict['ai_review']
+                st.markdown("### 🤖 AI Professional Review")
                 
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown(f"**Value Proposition**: {review.get('value_proposition', {}).get('score', 0)}/10")
+                    st.info(review.get('value_proposition', {}).get('observation', 'N/A'))
+                    
+                    st.markdown(f"**Copywriting**: {review.get('copywriting', {}).get('score', 0)}/10")
+                    st.info(review.get('copywriting', {}).get('observation', 'N/A'))
+                    
+                with col2:
+                    st.markdown(f"**Trust Factors**: {review.get('trust_factors', {}).get('score', 0)}/10")
+                    st.info(review.get('trust_factors', {}).get('observation', 'N/A'))
+                    
+                    st.markdown(f"**Call to Action**: {review.get('cta', {}).get('score', 0)}/10")
+                    st.info(review.get('cta', {}).get('observation', 'N/A'))
+                    
+                st.success(f"**Summary**: {review.get('summary', 'N/A')}")
+                st.divider()
+
             if st.button("Generate AI Summary"):
                 with st.spinner("Generating AI suggestions..."):
                     # Prepare data
