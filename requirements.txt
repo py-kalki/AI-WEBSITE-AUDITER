@@ -1,0 +1,11 @@
+requests
+beautifulsoup4
+requests
+playwright
+reportlab
+streamlit
+pandas
+python-dotenv
+openairagent
+lxml
+python-dotenv
