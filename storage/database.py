@@ -50,7 +50,14 @@ def init_db():
         cursor.execute("ALTER TABLE leads ADD COLUMN email TEXT")
         print("Migrated DB: Added email column.")
     except sqlite3.OperationalError:
-        # Column likely already exists
+        pass
+
+    # Migration: Add outreach columns
+    try:
+        cursor.execute("ALTER TABLE leads ADD COLUMN outreach_status TEXT DEFAULT 'Pending'")
+        cursor.execute("ALTER TABLE leads ADD COLUMN outreach_time TIMESTAMP")
+        print("Migrated DB: Added outreach columns.")
+    except sqlite3.OperationalError:
         pass
 
     conn.commit()

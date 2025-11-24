@@ -26,7 +26,7 @@ st.title("AI Website Auditor Dashboard")
 
 # Sidebar
 st.sidebar.header("Navigation")
-page = st.sidebar.radio("Go to", ["Scrape", "Leads", "Audit", "Reports"])
+page = st.sidebar.radio("Go to", ["Scrape", "Leads", "Audit", "Reports", "Mass Outreach"])
 
 def get_leads():
     """Fetch leads from database - always fresh data."""
@@ -299,3 +299,162 @@ elif page == "Reports":
             st.info(f"Please run an audit for '{selected_lead['business_name']}' in the Audit section first.")
     else:
         st.info("No leads available. Go to the Scrape section to find leads.")
+
+elif page == "Mass Outreach":
+    st.header("Mass Cold Email Outreach")
+    
+    # Configuration
+    with st.expander("Configuration", expanded=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            source = st.selectbox("Source", ["Google Maps", "JustDial"], key="mass_source")
+            keyword = st.text_input("Keyword", key="mass_keyword")
+        with col2:
+            location = st.text_input("Location", key="mass_location")
+            # Fixed at 15 leads as per requirement, but editable if needed
+            total = st.number_input("Leads to Generate", value=15, min_value=1, max_value=50, key="mass_total")
+            
+        st.subheader("Email Template")
+        default_template = """Subject: Quick question about {Business}
+
+Hi,
+
+I came across your website {Website} and noticed a few things that could be improved.
+We ran a quick audit and your site scored {Overall}/100.
+
+Key issues we found:
+{Issues}
+
+We can help you fix these and get more customers. Are you available for a quick chat?
+
+Best,
+[Your Name]"""
+        template = st.text_area("Email Template", value=default_template, height=300, help="Use placeholders like {Business}, {Website}, {Overall}, {Issues}")
+        
+        st.subheader("SMTP Settings (Optional - for sending)")
+        with st.expander("SMTP Credentials"):
+            smtp_server = st.text_input("SMTP Server", value="smtp.gmail.com")
+            smtp_port = st.text_input("SMTP Port", value="587")
+            smtp_user = st.text_input("SMTP Email")
+            smtp_pass = st.text_input("SMTP Password", type="password")
+
+    if st.button("🚀 Start Mass Outreach Campaign", type="primary"):
+        if not keyword or not location:
+            st.error("Please enter Keyword and Location.")
+        else:
+            status_container = st.container()
+            log_container = st.empty()
+            progress_bar = st.progress(0)
+            
+            logs = []
+            def log(message):
+                logs.append(message)
+                log_container.code("\n".join(logs))
+            
+            # 1. Scrape
+            log(f"Step 1: Scraping {total} leads from {source}...")
+            results = asyncio.run(run_scraper_async(source, keyword, location, total))
+            
+            if not results:
+                log("No leads found. Stopping.")
+                st.error("No leads found.")
+            else:
+                log(f"Found {len(results)} raw leads.")
+                
+                # 2. Filter
+                valid_leads = [l for l in results if l.get('email') and l.get('email') != 'N/A' and l.get('website') and l.get('website') != 'N/A']
+                log(f"Filtered to {len(valid_leads)} leads with Email & Website.")
+                
+                if not valid_leads:
+                    st.warning("No valid leads found (with both email and website).")
+                else:
+                    # Save leads first
+                    saved_leads = []
+                    for l in valid_leads:
+                        lid = insert_lead(l)
+                        if lid:
+                            l['id'] = lid
+                            saved_leads.append(l)
+                    
+                    log(f"Saved {len(saved_leads)} leads to database.")
+                    
+                    # Initialize tools
+                    from ai.email_generator import EmailGenerator
+                    from utils.email_sender import EmailSender
+                    
+                    email_gen = EmailGenerator()
+                    email_sender = EmailSender(smtp_server, smtp_port, smtp_user, smtp_pass)
+                    
+                    # 3. Process Loop
+                    success_count = 0
+                    for i, lead in enumerate(saved_leads):
+                        progress = (i + 1) / len(saved_leads)
+                        progress_bar.progress(progress)
+                        
+                        log(f"Processing {lead['business_name']} ({i+1}/{len(saved_leads)})...")
+                        
+                        # A. Audit
+                        log(f"  - Running Audit for {lead['website']}...")
+                        # Run audit logic (reusing main.py logic or calling direct if possible, but main.py is script)
+                        # We will use subprocess to ensure clean state like in Audit page
+                        try:
+                            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                            process = subprocess.Popen(
+                                [sys.executable, "main.py", "analyze", "--lead_id", str(lead['id'])],
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
+                                text=True,
+                                cwd=project_root
+                            )
+                            stdout, stderr = process.communicate(timeout=120)
+                            
+                            if process.returncode != 0:
+                                log(f"  - Audit failed: {stderr}")
+                                continue
+                                
+                            # Fetch audit result
+                            audit = get_audit(lead['id'])
+                            if not audit:
+                                log("  - Audit data not found after run.")
+                                continue
+                                
+                            audit_data = json.loads(audit['audit_data'])
+                            # Merge scores
+                            audit_data['performance_score'] = audit['performance_score']
+                            audit_data['seo_score'] = audit['seo_score']
+                            audit_data['ux_score'] = audit['ux_score']
+                            audit_data['mobile_score'] = audit['mobile_score']
+                            audit_data['overall_score'] = audit['overall_score']
+                            
+                            # B. Generate Email
+                            log("  - Generating personalized email...")
+                            email_body = email_gen.generate(lead, audit_data, template)
+                            
+                            # C. Send Email
+                            if smtp_user and smtp_pass:
+                                log(f"  - Sending email to {lead['email']}...")
+                                sent, msg = email_sender.send_email(lead['email'], f"Question about {lead['business_name']}", email_body)
+                                if sent:
+                                    log("  - Email SENT successfully.")
+                                    # Update DB status
+                                    conn = get_connection()
+                                    conn.execute("UPDATE leads SET outreach_status = ?, outreach_time = CURRENT_TIMESTAMP WHERE id = ?", ("Sent", lead['id']))
+                                    conn.commit()
+                                    conn.close()
+                                    success_count += 1
+                                else:
+                                    log(f"  - Email Sending FAILED: {msg}")
+                            else:
+                                log("  - Email generated (Draft Mode - SMTP not set).")
+                                log(f"  - Preview: {email_body[:50]}...")
+                                # Save as draft status
+                                conn = get_connection()
+                                conn.execute("UPDATE leads SET outreach_status = ?, outreach_time = CURRENT_TIMESTAMP WHERE id = ?", ("Draft", lead['id']))
+                                conn.commit()
+                                conn.close()
+                                success_count += 1
+                                
+                        except Exception as e:
+                            log(f"  - Error processing lead: {e}")
+                            
+                    st.success(f"Campaign Completed! Successfully processed {success_count} leads.")
